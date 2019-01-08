@@ -7,6 +7,8 @@
 #include "settings.h"
 #include <queue>
 
+#define BUTTON_PIN D5 // (=D5)
+
 uint8_t mqttBaseTopicSegmentCount = 0;
 uint8_t mqttRetryCounter = 0;
 
@@ -30,7 +32,9 @@ HTU21D htu21;
 RCSwitch rcSwitch = RCSwitch();
 
 void mqttConnect() {
+  
   while (!mqttClient.connected()) {
+    Serial.println("Connecting MQTT");
     if (mqttClient.connect(HOSTNAME, MQTT_TOPIC_STATE, 1, true, "disconnected")) {
       mqttClient.subscribe(MQTT_TOPIC_RCSWITCH);
       mqttClient.subscribe(MQTT_TOPIC_MQTTESP);
@@ -118,12 +122,17 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 }
 
 void setup() {
+  pinMode(BUTTON_PIN,INPUT_PULLUP);
 
   // Power-Up Delay
-  delay(2500);
+  delay(500);
   
   pinMode(BUILTIN_LED, OUTPUT);
   Serial.begin(115200);
+  
+  // Power-Up Delay 2
+  delay(500);
+  Serial.println("");
 
   rcSwitch.enableTransmit(D6);
   rcSwitch.setRepeatTransmit(RCSWITCH_TRANSMISSIONS);
@@ -142,10 +151,13 @@ void setup() {
   
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
+  Serial.println("Connecting WiFi");
   while (WiFi.status() != WL_CONNECTED) {
     Serial.print(".");
     delay(500);
   }
+  Serial.print("WiFi connected to: ");
+  Serial.println(WIFI_SSID);
   
   
   mqttClient.setClient(wifiClient);
@@ -157,6 +169,10 @@ void setup() {
   ArduinoOTA.begin();
 
   timer.setInterval(SENSOR_REFRESH_MS, []() {
+    Serial.print("h: ");
+    Serial.println(htu21.readHumidity());
+    Serial.print("t: ");
+    Serial.println(htu21.readTemperature());
     dtostrf(htu21.readHumidity(), 4, 2, convertBuffer);
     mqttClient.publish(MQTT_TOPIC_HUMIDITY, convertBuffer);
 
