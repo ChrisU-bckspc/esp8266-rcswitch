@@ -6,6 +6,7 @@
 #include <RCSwitch.h>h
 #include "settings.h"
 #include <queue>
+#include <Bounce2.h>
 
 #define BUTTON_PIN D5 // (=D5)
 
@@ -31,6 +32,10 @@ SimpleTimer timer;
 HTU21D htu21;
 RCSwitch rcSwitch = RCSwitch();
 
+Bounce debouncer1 = Bounce();
+bool buttonStateLatest1 = false;
+uint8_t echoTopic = ECHO_TOPIC;
+
 void mqttConnect() {
   
   while (!mqttClient.connected()) {
@@ -38,6 +43,9 @@ void mqttConnect() {
     if (mqttClient.connect(HOSTNAME, MQTT_TOPIC_STATE, 1, true, "disconnected")) {
       mqttClient.subscribe(MQTT_TOPIC_RCSWITCH);
       mqttClient.subscribe(MQTT_TOPIC_MQTTESP);
+      mqttClient.subscribe(MQTT_TOPIC_LED_1);
+      mqttClient.subscribe(MQTT_TOPIC_LED_2);
+      mqttClient.subscribe(MQTT_TOPIC_ECHO);
       mqttClient.publish(MQTT_TOPIC_STATE, "connected", true);
       mqttRetryCounter = 0;
       
@@ -74,17 +82,49 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   char *token;
   rcJob job;
 
+  //char* origTopic = topic;
+  String origTopic = topic;
+
+  // MQTT-EchoTopic-Switch
+  if (strncmp(topic, MQTT_TOPIC_ECHO, strlen(MQTT_TOPIC_ECHO)) == 0) {
+    if (strncmp((char*) payload, "ON", length) == 0) {
+      echoTopic = true;
+    } else if (strncmp((char*) payload, "OFF", length) == 0) {
+      echoTopic = false;
+    }
+    return;
+  }
+
+  // MQTT-Connection-Indicator-LED
   if (strncmp(topic, MQTT_TOPIC_MQTTESP, strlen(MQTT_TOPIC_MQTTESP)) == 0) {
-    
-    // MQTT Connection TEST - LED Indicator
     if (strncmp((char*) payload, "ON", length) == 0) {
       digitalWrite(BUILTIN_LED, LOW);
     } else if (strncmp((char*) payload, "OFF", length) == 0) {
       digitalWrite(BUILTIN_LED, HIGH);
     }
-
     return;
   }
+
+  // Builtin LED1 Switch
+  if (strncmp(topic, MQTT_TOPIC_LED_1, strlen(MQTT_TOPIC_LED_1)) == 0) {
+    if (strncmp((char*) payload, "ON", length) == 0) {
+      digitalWrite(BUILTIN_LED, LOW);
+    } else if (strncmp((char*) payload, "OFF", length) == 0) {
+      digitalWrite(BUILTIN_LED, HIGH);
+    }
+    return;
+  }
+
+  // Builtin LED2 Switch
+  if (strncmp(topic, MQTT_TOPIC_LED_2, strlen(MQTT_TOPIC_LED_2)) == 0) {
+    if (strncmp((char*) payload, "ON", length) == 0) {
+      digitalWrite(D4, LOW);
+    } else if (strncmp((char*) payload, "OFF", length) == 0) {
+      digitalWrite(D4, HIGH);
+    }
+    return;
+  }
+
     
   // RC-Switch
   token = strtok((char*) topic, MQTT_TOPIC_DELIMITER);
@@ -118,22 +158,33 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   
     rcJobQueue.push(job);
   }
+
+  // Echo Topic has to be last job
+  if ( echoTopic == 1 ){
+    char buf[75];
+    origTopic.toCharArray(buf, 75);
+    mqttClient.publish(MQTT_TOPIC_ECHO, buf);
+  }
   
 }
 
 void setup() {
   pinMode(BUTTON_PIN,INPUT_PULLUP);
+  debouncer1.attach(BUTTON_PIN);
+  debouncer1.interval(20); // interval in ms
 
-  // Power-Up Delay
-  delay(500);
-  
+  // Builtin LEDs
   pinMode(BUILTIN_LED, OUTPUT);
-  Serial.begin(115200);
+  pinMode(D4, OUTPUT);
+  digitalWrite(D4, HIGH );
   
-  // Power-Up Delay 2
+  // Serial + Power-Up Delays
+  delay(500);
+  Serial.begin(115200);
   delay(500);
   Serial.println("");
 
+  
   rcSwitch.enableTransmit(D6);
   rcSwitch.setRepeatTransmit(RCSWITCH_TRANSMISSIONS);
   
@@ -184,6 +235,22 @@ void setup() {
 }
 void loop() {
   mqttConnect();
+
+  // handle button
+  debouncer1.update();
+  int buttonState1 = debouncer1.read();
+  if ( buttonState1 == LOW) {
+    if ( buttonStateLatest1 == false ){
+      mqttClient.publish(MQTT_TOPIC_BUTTON, "ON");
+      buttonStateLatest1 = true;
+    }
+  }else{
+    if ( buttonStateLatest1 == true ){
+      mqttClient.publish(MQTT_TOPIC_BUTTON, "OFF");
+      buttonStateLatest1 = false;
+    }
+  }
+  
 
   if (!rcJobQueue.empty() && millis() > nextJobMillis) {
     rcJob job = rcJobQueue.front();
