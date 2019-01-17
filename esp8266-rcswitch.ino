@@ -161,8 +161,8 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   // Echo Topic has to be last job
   if ( echoTopic == 1 ){
-    char buf[75];
-    origTopic.toCharArray(buf, 75);
+    char buf[70];
+    origTopic.toCharArray(buf, 70);
     mqttClient.publish(MQTT_TOPIC_ECHO, buf);
   }
   
