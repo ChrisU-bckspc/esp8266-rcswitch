@@ -1,6 +1,7 @@
-#define LOCATION "lounge"
+#define LOCATION "testlab"
+#define USER "deinNickname"
 
-#define HOSTNAME "ESP-RC-" LOCATION
+#define HOSTNAME "ESP-" USER "-" LOCATION
 
 #define WIFI_SSID "-------"
 #define WIFI_PASSWORD "---------"
@@ -11,13 +12,17 @@
 
 #define OTA_PASSWORD "tollesPasswort!"
 
-#define SENSOR_REFRESH_MS  (5 * 60 * 1000)
+#define SENSOR_REFRESH_MS  (15 * 1000)
 #define RCSWITCH_PAUSE_MS 100
 #define RCSWITCH_TRANSMISSIONS 15
 
 const char* MQTT_TOPIC_DELIMITER = "/";
 
-const char* MQTT_TOPIC_RCSWITCH = "actors/powersockets/" LOCATION "/#";
-const char* MQTT_TOPIC_TEMPERATURE = "sensor/temperature/" LOCATION;
-const char* MQTT_TOPIC_HUMIDITY = "sensor/humidity/" LOCATION;
-const char* MQTT_TOPIC_STATE = "state/powersockets/" LOCATION;
+const char* MQTT_TOPIC_TEMPERATURE = USER "/sensor/temperature/" LOCATION;
+const char* MQTT_TOPIC_HUMIDITY    = USER "/sensor/humidity/" LOCATION;
+const char* MQTT_TOPIC_BUTTON      = USER "/sensor/button/" LOCATION;
+const char* MQTT_TOPIC_LED_1       = USER "/actors/led1/" LOCATION;
+const char* MQTT_TOPIC_LED_2       = USER "/actors/led2/" LOCATION;
+const char* MQTT_TOPIC_RCSWITCH    = USER "/actors/powersockets/" LOCATION "/#";
+const char* MQTT_TOPIC_MQTTESP     = USER "/actors/state/mqttconnected";
+const char* MQTT_TOPIC_STATE       = USER "/state/powersockets/" LOCATION;
