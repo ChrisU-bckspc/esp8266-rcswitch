@@ -8,6 +8,8 @@
 #include <queue>
 
 uint8_t mqttBaseTopicSegmentCount = 0;
+uint8_t mqttRetryCounter = 0;
+
 char convertBuffer[10] = {0};
 
 typedef struct {
@@ -33,9 +35,16 @@ void mqttConnect() {
       mqttClient.subscribe(MQTT_TOPIC_RCSWITCH);
       mqttClient.subscribe(MQTT_TOPIC_MQTTESP);
       mqttClient.publish(MQTT_TOPIC_STATE, "connected", true);
+      mqttRetryCounter = 0;
+      
     } else {
       Serial.println("MQTT connect failed!");
-      delay(1000);
+      
+      if (mqttRetryCounter++ > MQTT_MAX_CONNECT_RETRY) {
+        ESP.restart();
+      }
+      
+      delay(2000);
     }
   }
 }
@@ -61,52 +70,58 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   char *token;
   rcJob job;
 
-  if ( strncmp (topic,MQTT_TOPIC_MQTTESP,strlen(MQTT_TOPIC_MQTTESP)) == 0 ) {
+  if (strncmp(topic, MQTT_TOPIC_MQTTESP, strlen(MQTT_TOPIC_MQTTESP)) == 0) {
+    
     // MQTT Connection TEST - LED Indicator
     if (strncmp((char*) payload, "ON", length) == 0) {
-      digitalWrite(BUILTIN_LED, LOW);   // Remember: LOW == LED OFF
+      digitalWrite(BUILTIN_LED, LOW);
     } else if (strncmp((char*) payload, "OFF", length) == 0) {
       digitalWrite(BUILTIN_LED, HIGH);
+    }
+
+    return;
+  }
+    
+  // RC-Switch
+  token = strtok((char*) topic, MQTT_TOPIC_DELIMITER);
+
+  while (token != NULL) {
+    if (segment == mqttBaseTopicSegmentCount) {
+        strncpy(job.systemCode, token, 5);
+    } else if (segment == mqttBaseTopicSegmentCount + 1) {
+        strncpy(job.unitCode, token, 5);
+    }
+
+    // Bounds checking...
+    if (segment > mqttBaseTopicSegmentCount + 1) {
+      return;
+    }
+
+    token = strtok(NULL, MQTT_TOPIC_DELIMITER);
+    segment++;
+  }
+
+  // Check for powersocket-commands
+  if (isCodeValid(job.systemCode) && isCodeValid(job.unitCode)) {
+    
+    if (strncmp((char*) payload, "ON", length) == 0) {
+      job.on = true;
+    } else if (strncmp((char*) payload, "OFF", length) == 0) {
+      job.on = false;
     } else {
       return;
     }
-    
-  }else{
-    // RC-Switch
-    token = strtok((char*) topic, MQTT_TOPIC_DELIMITER);
   
-    while (token != NULL) {
-      if (segment == mqttBaseTopicSegmentCount) {
-          strncpy(job.systemCode, token, 5);
-      } else if (segment == mqttBaseTopicSegmentCount + 1) {
-          strncpy(job.unitCode, token, 5);
-      }
-  
-      // Bounds checking...
-      if (segment > mqttBaseTopicSegmentCount + 1) {
-        return;
-      }
-  
-      token = strtok(NULL, MQTT_TOPIC_DELIMITER);
-      segment++;
-    }
-
-    // Check for powersocket-commands
-    if (isCodeValid(job.systemCode) && isCodeValid(job.unitCode)) {
-      if (strncmp((char*) payload, "ON", length) == 0) {
-        job.on = true;
-      } else if (strncmp((char*) payload, "OFF", length) == 0) {
-        job.on = false;
-      } else {
-        return;
-      }
-    
-      rcJobQueue.push(job);
-    }
+    rcJobQueue.push(job);
   }
+  
 }
 
 void setup() {
+
+  // Power-Up Delay
+  delay(2500);
+  
   pinMode(BUILTIN_LED, OUTPUT);
   Serial.begin(115200);
 
@@ -131,6 +146,7 @@ void setup() {
     Serial.print(".");
     delay(500);
   }
+  
   
   mqttClient.setClient(wifiClient);
   mqttClient.setServer(MQTT_HOST, MQTT_PORT);
@@ -157,11 +173,17 @@ void loop() {
     rcJob job = rcJobQueue.front();
     rcJobQueue.pop();
 
+    noInterrupts();
+    digitalWrite(BUILTIN_LED, LOW);
+    
     if (job.on) {
       rcSwitch.switchOn(job.systemCode, job.unitCode);
     } else {
       rcSwitch.switchOff(job.systemCode, job.unitCode);
     }
+
+    digitalWrite(BUILTIN_LED, HIGH);
+    interrupts(); 
     
     nextJobMillis = millis() + RCSWITCH_PAUSE_MS;
   }
