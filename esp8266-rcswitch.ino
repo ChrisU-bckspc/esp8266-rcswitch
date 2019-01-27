@@ -34,7 +34,6 @@ RCSwitch rcSwitch = RCSwitch();
 
 Bounce debouncer1 = Bounce();
 bool buttonStateLatest1 = false;
-uint8_t echoTopic = ECHO_TOPIC;
 
 void mqttConnect() {
   
@@ -45,7 +44,6 @@ void mqttConnect() {
       mqttClient.subscribe(MQTT_TOPIC_MQTTESP);
       mqttClient.subscribe(MQTT_TOPIC_LED_1);
       mqttClient.subscribe(MQTT_TOPIC_LED_2);
-      mqttClient.subscribe(MQTT_TOPIC_ECHO);
       mqttClient.publish(MQTT_TOPIC_STATE, "connected", true);
       mqttRetryCounter = 0;
       
@@ -81,19 +79,6 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   uint8_t segment = 0;
   char *token;
   rcJob job;
-
-  //char* origTopic = topic;
-  String origTopic = topic;
-
-  // MQTT-EchoTopic-Switch
-  if (strncmp(topic, MQTT_TOPIC_ECHO, strlen(MQTT_TOPIC_ECHO)) == 0) {
-    if (strncmp((char*) payload, "ON", length) == 0) {
-      echoTopic = true;
-    } else if (strncmp((char*) payload, "OFF", length) == 0) {
-      echoTopic = false;
-    }
-    return;
-  }
 
   // MQTT-Connection-Indicator-LED
   if (strncmp(topic, MQTT_TOPIC_MQTTESP, strlen(MQTT_TOPIC_MQTTESP)) == 0) {
@@ -158,14 +143,6 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   
     rcJobQueue.push(job);
   }
-
-  // Echo Topic has to be last job
-  if ( echoTopic == 1 ){
-    char buf[70];
-    origTopic.toCharArray(buf, 70);
-    mqttClient.publish(MQTT_TOPIC_ECHO, buf);
-  }
-  
 }
 
 void setup() {
